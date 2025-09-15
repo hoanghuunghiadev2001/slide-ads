@@ -50,7 +50,7 @@ export default function SlideShow() {
           key={slide.id}
           src={slide.imageUrl}
           alt={slide.title}
-          className={`absolute top-0 left-0 w-full h-full object-cover transition-opacity duration-500 ${
+          className={`absolute top-0 left-0 w-[100vw] h-[100vh]   transition-opacity duration-500 ${
             index === current ? "opacity-100" : "opacity-0"
           }`}
         />
