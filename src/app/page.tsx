@@ -17,14 +17,14 @@ export default function SlideShow() {
 
   useEffect(() => {
     fetch("/api/slides")
-      .then(res => res.json())
+      .then((res) => res.json())
       .then(setSlides);
   }, []);
 
   useEffect(() => {
     if (!slides.length) return;
 
-    const duration = slides[current].duration || 5000;
+    const duration = slides[current].duration || 10000;
     const intervalTime = 50;
     progressRef.current = 0;
     setProgress(0);
@@ -33,7 +33,7 @@ export default function SlideShow() {
       progressRef.current += intervalTime;
       setProgress(Math.min((progressRef.current / duration) * 100, 100));
       if (progressRef.current >= duration) {
-        setCurrent(prev => (prev + 1) % slides.length);
+        setCurrent((prev) => (prev + 1) % slides.length);
       }
     }, intervalTime);
 
@@ -57,7 +57,7 @@ export default function SlideShow() {
       ))}
 
       {/* Progress bar */}
-       <div className="absolute bottom-10 left-0 w-full flex justify-center gap-2">
+      <div className="absolute bottom-10 left-0 w-full flex justify-center gap-2">
         {slides.map((_, index) => (
           <span
             key={index}
@@ -70,7 +70,7 @@ export default function SlideShow() {
 
       <div className="absolute bottom-4 left-0 w-full h-2 bg-white/30">
         <div
-          className="h-2 bg-blue-500 transition-all duration-50"
+          className="h-2 bg-blue-500 transition-all duration-50 rounded-3xl"
           style={{ width: `${progress}%` }}
         />
       </div>
@@ -81,7 +81,6 @@ export default function SlideShow() {
       </div> */}
 
       {/* Indicators */}
-     
     </div>
   );
 }

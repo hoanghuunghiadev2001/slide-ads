@@ -11,6 +11,10 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
 
+  const cloud_name = (process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME =
+    "dcmypc7xh");
+  const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
+
   // 🧭 Lấy danh sách slide
   async function fetchSlides() {
     try {
@@ -34,11 +38,11 @@ export default function AdminPage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("upload_preset", "unsigned_slides"); // ⚠️ thay bằng preset của bạn
+      formData.append("upload_preset", UPLOAD_PRESET); // ⚠️ thay bằng preset của bạn
 
       // 👉 Upload trực tiếp lên Cloudinary
       const cloudRes = await fetch(
-        `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
+        `https://api.cloudinary.com/v1_1/${cloud_name}/image/upload`,
         {
           method: "POST",
           body: formData,
