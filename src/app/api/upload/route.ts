@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
+export const runtime = "nodejs";
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME!,
@@ -31,6 +32,9 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     return NextResponse.json({ secure_url: result.secure_url });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Upload failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message || "Upload failed" },
+      { status: 500 }
+    );
   }
 }
