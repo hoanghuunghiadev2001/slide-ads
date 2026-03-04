@@ -66,43 +66,55 @@ export default function AdminPage() {
   };
 
   async function handleUpload() {
-    if (!file || !title) return alert("Vui lòng chọn ảnh và nhập tiêu đề");
+    // Basic validation: Title is always required.
+    // File is only required if we aren't editing.
+    if (!title || (!file && !editingId)) {
+      return alert("Vui lòng nhập tiêu đề và chọn ảnh");
+    }
+
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("upload_preset", UPLOAD_PRESET); // ⚠️ thay bằng preset của bạn
+      let finalImageUrl = previewUrl; // Default to current preview (existing URL)
 
-      // 👉 Upload trực tiếp lên Cloudinary
-      const cloudRes = await fetch(
-        `https://api.cloudinary.com/v1_1/${cloud_name}/image/upload`,
-        {
-          method: "POST",
-          body: formData,
-        },
-      );
+      // 1. Only upload to Cloudinary if a NEW file was selected
+      if (file) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("upload_preset", UPLOAD_PRESET);
 
-      const uploadData = await cloudRes.json();
-      if (!uploadData.secure_url)
-        throw new Error(uploadData.error?.message || "Upload thất bại");
+        const cloudRes = await fetch(
+          `https://api.cloudinary.com/v1_1/${cloud_name}/image/upload`,
+          { method: "POST", body: formData },
+        );
 
-      // 👉 Gửi URL + title vào DB
+        const uploadData = await cloudRes.json();
+        if (!uploadData.secure_url) throw new Error("Upload ảnh thất bại");
+        finalImageUrl = uploadData.secure_url;
+      }
+
+      // 2. Determine if we are Updating (PUT) or Creating (POST)
+      const method = editingId ? "PUT" : "POST";
+      const bodyData = {
+        title,
+        duration,
+        imageUrl: finalImageUrl,
+        ...(editingId && { id: editingId }), // Include ID if editing
+      };
+
       const saveRes = await fetch("/api/slides", {
-        method: "POST",
+        method: method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title,
-          imageUrl: uploadData.secure_url,
-        }),
+        body: JSON.stringify(bodyData),
       });
 
-      if (!saveRes.ok) throw new Error("Không thể lưu slide vào hệ thống");
+      if (!saveRes.ok) throw new Error("Lỗi lưu dữ liệu vào hệ thống");
 
-      setTitle("");
-      setFile(null);
+      // 3. Reset Form & Refresh
+      alert(editingId ? "Cập nhật thành công!" : "Thêm mới thành công!");
+      cancelEdit(); // Helper to clear all states
       await fetchSlides();
     } catch (err: any) {
-      alert(err.message || "Lỗi upload");
+      alert(err.message || "Lỗi xử lý");
     } finally {
       setLoading(false);
     }
