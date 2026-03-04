@@ -18,5 +18,8 @@ model Slide {
   title     String
   imageUrl  String
   position  Int      @default(0)
+  duration  Int      @default(5)
   createdAt DateTime @default(now())
+  // Thêm @default(now()) tạm thời ở đây
+  updatedAt DateTime @default(now()) @updatedAt
 }

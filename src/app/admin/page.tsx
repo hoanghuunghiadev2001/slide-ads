@@ -2,155 +2,348 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 export default function AdminPage() {
   const [slides, setSlides] = useState<any[]>([]);
   const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [title, setTitle] = useState("");
+  const [duration, setDuration] = useState<number>(8);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const cloud_name = (process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME =
-    "dcmypc7xh");
-  const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
+  // State dành riêng cho việc Edit
+  const [editingId, setEditingId] = useState<number | null>(null);
 
-  // 🧭 Lấy danh sách slide
+  const cloud_name = "dcmypc7xh";
+  const UPLOAD_PRESET = "your_preset";
+
+  useEffect(() => {
+    fetchSlides();
+  }, []);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      setFile(selectedFile);
+      setPreviewUrl(URL.createObjectURL(selectedFile));
+    }
+  };
+
   async function fetchSlides() {
     try {
       setFetching(true);
       const res = await fetch("/api/slides");
-      if (!res.ok) throw new Error("Không thể tải danh sách");
       const data = await res.json();
       setSlides(data);
     } catch (err) {
-      console.error(err);
-      alert("Lỗi khi tải danh sách slide");
+      console.error("Lỗi fetch:", err);
     } finally {
       setFetching(false);
     }
   }
 
-  // ☁️ Upload trực tiếp lên Cloudinary
-  async function handleUpload() {
-    if (!file || !title) return alert("Vui lòng chọn ảnh và nhập tiêu đề");
+  // Bật chế độ chỉnh sửa: Đưa dữ liệu cũ lên Form
+  const startEdit = (slide: any) => {
+    setEditingId(slide.id);
+    setTitle(slide.title);
+    setDuration(slide.duration || 8);
+    setPreviewUrl(slide.imageUrl); // Hiển thị ảnh cũ để xem trước
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // Hủy chỉnh sửa
+  const cancelEdit = () => {
+    setEditingId(null);
+    setTitle("");
+    setDuration(8);
+    setFile(null);
+    setPreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  async function handleAction() {
+    if (!title) return alert("Vui lòng nhập tiêu đề!");
     setLoading(true);
+
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("upload_preset", UPLOAD_PRESET); // ⚠️ thay bằng preset của bạn
+      let finalImageUrl = previewUrl;
 
-      // 👉 Upload trực tiếp lên Cloudinary
-      const cloudRes = await fetch(
-        `https://api.cloudinary.com/v1_1/${cloud_name}/image/upload`,
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
+      // 1. Nếu có chọn file mới thì mới upload Cloudinary
+      if (file) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("upload_preset", UPLOAD_PRESET);
+        const cloudRes = await fetch(
+          `https://api.cloudinary.com/v1_1/${cloud_name}/image/upload`,
+          {
+            method: "POST",
+            body: formData,
+          },
+        );
+        const uploadData = await cloudRes.json();
+        finalImageUrl = uploadData.secure_url;
+      }
 
-      const uploadData = await cloudRes.json();
-      if (!uploadData.secure_url)
-        throw new Error(uploadData.error?.message || "Upload thất bại");
+      // 2. Gửi request: POST (Tạo mới) hoặc PUT (Cập nhật)
+      const method = editingId ? "PUT" : "POST";
+      const bodyData = editingId
+        ? {
+            id: editingId,
+            title,
+            imageUrl: finalImageUrl,
+            duration: Number(duration),
+          }
+        : { title, imageUrl: finalImageUrl, duration: Number(duration) };
 
-      // 👉 Gửi URL + title vào DB
-      const saveRes = await fetch("/api/slides", {
-        method: "POST",
+      const res = await fetch("/api/slides", {
+        method: method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title,
-          imageUrl: uploadData.secure_url,
-        }),
+        body: JSON.stringify(bodyData),
       });
 
-      if (!saveRes.ok) throw new Error("Không thể lưu slide vào hệ thống");
-
-      setTitle("");
-      setFile(null);
-      await fetchSlides();
-    } catch (err: any) {
-      alert(err.message || "Lỗi upload");
+      if (res.ok) {
+        cancelEdit();
+        fetchSlides();
+      }
+    } catch (err) {
+      alert("Thao tác thất bại, vui lòng kiểm tra lại!");
     } finally {
       setLoading(false);
     }
   }
 
-  // 🗑 Xóa slide
   async function deleteSlide(id: number) {
-    if (!confirm("Bạn có chắc muốn xóa slide này?")) return;
-    try {
-      await fetch(`/api/slides?id=${id}`, { method: "DELETE" });
-      fetchSlides();
-    } catch {
-      alert("Không thể xóa slide");
-    }
+    if (!confirm("Xác nhận xóa slide này?")) return;
+    await fetch(`/api/slides?id=${id}`, { method: "DELETE" });
+    fetchSlides();
   }
 
-  // 🪄 Lần đầu load trang
-  useEffect(() => {
-    fetchSlides();
-  }, []);
-
   return (
-    <div className="p-6">
-      <h1 className="text-xl font-bold mb-4">Quản lý Slide</h1>
+    <div className="min-h-screen bg-[#f8fafc] p-4 md:p-10 font-sans text-slate-900">
+      <div className="max-w-7xl mx-auto">
+        <header className="mb-10 flex justify-between items-end">
+          <div>
+            <h1 className="text-4xl font-black tracking-tight text-slate-900 uppercase">
+              Admin <span className="text-blue-600">Portal</span>
+            </h1>
+            <p className="text-slate-500 mt-1">
+              Hệ thống điều khiển Toyota Bình Dương
+            </p>
+          </div>
+        </header>
 
-      {/* Khu vực upload */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <input
-          type="file"
-          accept="image/*"
-          onChange={(e) => setFile(e.target.files?.[0] || null)}
-        />
-        <input
-          type="text"
-          placeholder="Tiêu đề"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="border p-2 rounded"
-        />
-        <button
-          onClick={handleUpload}
-          disabled={loading}
-          className={`px-4 py-2 rounded text-white flex items-center justify-center gap-2 ${
-            loading ? "bg-gray-400" : "bg-blue-500 hover:bg-blue-600"
-          }`}
-        >
-          {loading && (
-            <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
-          )}
-          {loading ? "Đang upload..." : "Upload"}
-        </button>
-      </div>
-
-      {/* Danh sách slide */}
-      {fetching ? (
-        <p>Đang tải danh sách slide...</p>
-      ) : slides.length === 0 ? (
-        <p>Chưa có slide nào.</p>
-      ) : (
-        <ul>
-          {slides.map((s) => (
-            <li
-              key={s.id}
-              className="mb-2 flex items-center gap-3 border-b pb-2 w-fit"
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* FORM SIDE (CREATE / EDIT) */}
+          <div className="lg:col-span-1 space-y-6">
+            <div
+              className={`p-6 rounded-3xl shadow-sm border transition-all duration-500 ${editingId ? "bg-blue-50 border-blue-200 ring-4 ring-blue-500/5" : "bg-white border-slate-200"}`}
             >
-              <img
-                src={s.imageUrl}
-                alt={s.title}
-                className="w-32 h-20 object-cover rounded"
-              />
-              <span className="flex-1">{s.title}</span>
-              <button
-                onClick={() => deleteSlide(s.id)}
-                className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded"
-              >
-                Xóa
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+              <h2 className="text-lg font-bold mb-5 flex items-center gap-2">
+                <span
+                  className={`w-2 h-6 rounded-full ${editingId ? "bg-orange-500 animate-pulse" : "bg-blue-600"}`}
+                ></span>
+                {editingId ? "Chỉnh sửa Slide" : "Tạo Slide Mới"}
+              </h2>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">
+                    Tiêu đề slide
+                  </label>
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="w-full mt-1 p-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">
+                    Thời lượng (giây)
+                  </label>
+                  <input
+                    type="number"
+                    value={duration}
+                    onChange={(e) => setDuration(parseInt(e.target.value))}
+                    className="w-full mt-1 p-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">
+                    Hình ảnh {editingId && "(Để trống nếu giữ nguyên)"}
+                  </label>
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="mt-1 border-2 border-dashed border-slate-200 rounded-xl p-4 text-center cursor-pointer hover:bg-white transition-colors bg-white/50"
+                  >
+                    <input
+                      type="file"
+                      hidden
+                      ref={fileInputRef}
+                      onChange={handleFileChange}
+                      accept="image/*"
+                    />
+                    <p className="text-xs text-slate-500 italic">
+                      Thay đổi hình ảnh 4K
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={handleAction}
+                    disabled={loading}
+                    className={`flex-1 py-4 rounded-2xl font-bold text-white transition-all shadow-lg active:scale-95 ${editingId ? "bg-orange-500 hover:bg-orange-600" : "bg-slate-900 hover:bg-blue-600"}`}
+                  >
+                    {loading
+                      ? "ĐANG LƯU..."
+                      : editingId
+                        ? "LƯU THAY ĐỔI"
+                        : "THÊM SLIDE MỚI"}
+                  </button>
+                  {editingId && (
+                    <button
+                      onClick={cancelEdit}
+                      className="px-6 py-4 bg-white border border-slate-200 text-slate-500 font-bold rounded-2xl hover:bg-slate-100 transition-all"
+                    >
+                      HỦY
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* LIVE PREVIEW */}
+            <div className="bg-slate-900 rounded-3xl p-4 shadow-2xl relative aspect-video overflow-hidden">
+              {previewUrl ? (
+                <>
+                  <img
+                    src={previewUrl}
+                    className="absolute inset-0 w-full h-full object-cover opacity-60"
+                    alt=""
+                  />
+                  <div className="relative z-10 h-full flex flex-col justify-end p-2">
+                    <p className="text-blue-400 text-[10px] font-bold tracking-[0.3em] uppercase">
+                      Visual Preview
+                    </p>
+                    <h3 className="text-white font-black text-lg uppercase truncate">
+                      {title || "---"}
+                    </h3>
+                  </div>
+                </>
+              ) : (
+                <div className="h-full flex items-center justify-center text-slate-600 text-xs italic">
+                  Chế độ xem trước
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* LIST SIDE */}
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h2 className="font-bold text-slate-700">Slides Displaying</h2>
+                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black">
+                  {slides.length} ITEMS
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-50 text-slate-400 text-[10px] uppercase font-bold tracking-widest">
+                    <tr>
+                      <th className="px-6 py-4">Image</th>
+                      <th className="px-6 py-4">Details</th>
+                      <th className="px-6 py-4 text-center">Timing</th>
+                      <th className="px-6 py-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {slides.map((s) => (
+                      <tr
+                        key={s.id}
+                        className={`group transition-all ${editingId === s.id ? "bg-blue-50/50" : "hover:bg-slate-50"}`}
+                      >
+                        <td className="px-6 py-4">
+                          <div className="w-20 h-12 rounded-lg overflow-hidden border border-slate-200 shadow-sm">
+                            <img
+                              src={s.imageUrl}
+                              className="w-full h-full object-cover"
+                              alt=""
+                            />
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-slate-700 text-sm">
+                            {s.title}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono italic">
+                            Cloudinary-ID: {s.id}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center text-sm font-mono text-blue-600 font-bold">
+                          {s.duration}s
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => startEdit(s)}
+                              className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                              title="Sửa slide"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="18"
+                                height="18"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => deleteSlide(s.id)}
+                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="18"
+                                height="18"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                <line x1="10" y1="11" x2="10" y2="17"></line>
+                                <line x1="14" y1="11" x2="14" y2="17"></line>
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
