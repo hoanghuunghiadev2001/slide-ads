@@ -62,6 +62,7 @@ export default function AdminPage() {
     setFile(null);
     setPreviewUrl(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+    console.log("tét");
   };
 
   async function handleUpload() {
