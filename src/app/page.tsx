@@ -98,14 +98,14 @@ export default function SlideShow() {
       })}
 
       {/* Nội dung Text - Thiết kế tối giản sang trọng */}
-      <div className="absolute inset-0 z-20 flex flex-col justify-end p-12 md:p-20 pointer-events-none">
+      <div className="absolute inset-0 z-20 flex flex-col justify-end p-6! md:p-20 pointer-events-none">
         <div
           className={`transition-all duration-1000 transform ${progress > 2 ? "translate-y-0 opacity-100" : "translate-y-10 opacity-0"}`}
         >
           <p className="text-blue-500 font-bold tracking-[0.3em] mb-2 text-sm md:text-base uppercase">
             Featured Content
           </p>
-          <h2 className="text-white text-5xl md:text-8xl font-black uppercase leading-none tracking-tighter max-w-4xl drop-shadow-2xl">
+          <h2 className="text-white text-5xl! md:text-8xl font-black uppercase leading-none tracking-tighter max-w-4xl drop-shadow-2xl">
             {slides[current].title}
           </h2>
         </div>
