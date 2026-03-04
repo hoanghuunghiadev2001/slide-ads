@@ -18,7 +18,7 @@ export default function AdminPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
 
   const cloud_name = "dcmypc7xh";
-  const UPLOAD_PRESET = "your_preset";
+  const UPLOAD_PRESET = "slide-ads";
 
   useEffect(() => {
     fetchSlides();
@@ -64,52 +64,44 @@ export default function AdminPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  async function handleAction() {
-    if (!title) return alert("Vui lòng nhập tiêu đề!");
+  async function handleUpload() {
+    if (!file || !title) return alert("Vui lòng chọn ảnh và nhập tiêu đề");
     setLoading(true);
-
     try {
-      let finalImageUrl = previewUrl;
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("upload_preset", UPLOAD_PRESET); // ⚠️ thay bằng preset của bạn
 
-      // 1. Nếu có chọn file mới thì mới upload Cloudinary
-      if (file) {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("upload_preset", UPLOAD_PRESET);
-        const cloudRes = await fetch(
-          `https://api.cloudinary.com/v1_1/${cloud_name}/image/upload`,
-          {
-            method: "POST",
-            body: formData,
-          },
-        );
-        const uploadData = await cloudRes.json();
-        finalImageUrl = uploadData.secure_url;
-      }
+      // 👉 Upload trực tiếp lên Cloudinary
+      const cloudRes = await fetch(
+        `https://api.cloudinary.com/v1_1/${cloud_name}/image/upload`,
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
 
-      // 2. Gửi request: POST (Tạo mới) hoặc PUT (Cập nhật)
-      const method = editingId ? "PUT" : "POST";
-      const bodyData = editingId
-        ? {
-            id: editingId,
-            title,
-            imageUrl: finalImageUrl,
-            duration: Number(duration),
-          }
-        : { title, imageUrl: finalImageUrl, duration: Number(duration) };
+      const uploadData = await cloudRes.json();
+      if (!uploadData.secure_url)
+        throw new Error(uploadData.error?.message || "Upload thất bại");
 
-      const res = await fetch("/api/slides", {
-        method: method,
+      // 👉 Gửi URL + title vào DB
+      const saveRes = await fetch("/api/slides", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(bodyData),
+        body: JSON.stringify({
+          title,
+          imageUrl: uploadData.secure_url,
+        }),
       });
 
-      if (res.ok) {
-        cancelEdit();
-        fetchSlides();
-      }
-    } catch (err) {
-      alert("Thao tác thất bại, vui lòng kiểm tra lại!");
+      if (!saveRes.ok) throw new Error("Không thể lưu slide vào hệ thống");
+
+      setTitle("");
+      setFile(null);
+      await fetchSlides();
+    } catch (err: any) {
+      alert(err.message || "Lỗi upload");
     } finally {
       setLoading(false);
     }
@@ -196,7 +188,7 @@ export default function AdminPage() {
 
                 <div className="flex gap-2 pt-2">
                   <button
-                    onClick={handleAction}
+                    onClick={handleUpload}
                     disabled={loading}
                     className={`flex-1 py-4 rounded-2xl font-bold text-white transition-all shadow-lg active:scale-95 ${editingId ? "bg-orange-500 hover:bg-orange-600" : "bg-slate-900 hover:bg-blue-600"}`}
                   >
